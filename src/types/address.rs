@@ -1,4 +1,7 @@
-use serde::{Serialize, Deserialize};
+use ring::digest;
+use serde::{Deserialize, Serialize};
+
+use std::convert::TryInto;
 
 // 20-byte address
 #[derive(Eq, PartialEq, Serialize, Deserialize, Clone, Hash, Default, Copy)]
@@ -48,7 +51,19 @@ impl std::fmt::Debug for Address {
 
 impl Address {
     pub fn from_public_key_bytes(bytes: &[u8]) -> Address {
-        unimplemented!()
+        // takes the input bytes and produces a SHA256 hash
+        let digest = ring::digest::digest(&digest::SHA256, bytes);
+
+        // convert Digest to [u8; size]
+        let temp: [u8; ring::digest::SHA256_OUTPUT_LEN] = digest.as_ref().try_into().unwrap();
+        let len = temp.len();
+
+        // get the last 20 bytes of the hash
+        let mut adr: [u8; 20] = temp[len - 20..len].try_into().unwrap();
+
+        // convert it to Address type and return
+        let address = Address::from(adr);
+        address
     }
 }
 // DO NOT CHANGE THIS COMMENT, IT IS FOR AUTOGRADER. BEFORE TEST

@@ -1,0 +1,11 @@
+C:\Users\anton\Desktop\COS470 Projects\COS-ECE470-fa2022\target\debug\deps\libc-e638720d8345d2b9.rmeta: C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\lib.rs C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\macros.rs C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\fixed_width_ints.rs C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\windows\mod.rs C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\windows\msvc\mod.rs
+
+C:\Users\anton\Desktop\COS470 Projects\COS-ECE470-fa2022\target\debug\deps\liblibc-e638720d8345d2b9.rlib: C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\lib.rs C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\macros.rs C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\fixed_width_ints.rs C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\windows\mod.rs C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\windows\msvc\mod.rs
+
+C:\Users\anton\Desktop\COS470 Projects\COS-ECE470-fa2022\target\debug\deps\libc-e638720d8345d2b9.d: C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\lib.rs C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\macros.rs C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\fixed_width_ints.rs C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\windows\mod.rs C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\windows\msvc\mod.rs
+
+C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\lib.rs:
+C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\macros.rs:
+C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\fixed_width_ints.rs:
+C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\windows\mod.rs:
+C:\Users\anton\.cargo\registry\src\github.com-1ecc6299db9ec823\libc-0.2.108\src\windows\msvc\mod.rs:
