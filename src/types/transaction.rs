@@ -4,8 +4,10 @@ use ring::signature::{self,Ed25519KeyPair, EdDSAParameters, KeyPair, Signature, 
 use serde::{Deserialize, Serialize};
 extern crate bincode;
 use bincode::{serialize, deserialize};
-
+use ring::digest;
+use super::hash::Hashable;
 use crate::types::address::Address;
+use super::hash::H256;
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Transaction {
@@ -21,6 +23,12 @@ pub struct SignedTransaction {
     pubkey: Vec<u8>,
     // signature and pubkey represented as Vec<u8> for convenience --> check these structs as a part
     // of ring crate
+}
+
+impl Hashable for SignedTransaction {
+    fn hash(&self) -> H256 {
+        ring::digest::digest(&digest::SHA256, &bincode::serialize(&self).unwrap()).into()
+    }    
 }
 
 /// Create digital signature of a transaction

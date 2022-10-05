@@ -81,6 +81,10 @@ impl MerkleTree {
     }
 
     pub fn root(&self) -> H256 {
+        if self.hashes.len() == 0 {
+            let hash: H256 = [0u8; 32].into();
+            return hash;
+        }
         self.hashes[self.hashes.len() - 1][0]
     }
 
@@ -122,6 +126,10 @@ impl MerkleTree {
 /// Verify that the datum hash with a vector of proofs will produce the Merkle root. Also need the
 /// index of datum and `leaf_size`, the total number of leaves.
 pub fn verify(root: &H256, datum: &H256, proof: &[H256], index: usize, leaf_size: usize) -> bool {
+    let zero_hash: H256 = [0u8; 32].into();
+    if *root == zero_hash {
+        return false
+    }
     let mut test: &H256 = datum;
     let mut temp: H256;
     let mut pointer = index;
