@@ -1,8 +1,6 @@
 use crate::types::block::Block;
 use crate::types::hash::H256;
 use crate::types::merkle::MerkleTree;
-use crate::types::block::Header;
-use crate::types::block::Data;
 use crate::types::hash::Hashable;
 use crate::types::transaction::SignedTransaction;
 use std::collections::HashMap;
