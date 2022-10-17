@@ -1,4 +1,4 @@
-use crate::types::block::Block;
+use crate::types::block::{Block, Header, Data};
 use crate::types::hash::H256;
 use crate::types::merkle::MerkleTree;
 use crate::types::hash::Hashable;
