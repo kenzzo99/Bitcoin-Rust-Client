@@ -21,7 +21,7 @@ impl Blockchain {
         let data = Data{data: Vec::new()};
         let merkle_root = MerkleTree::new(&data.data).root();
         let parent: H256 = [0u8; 32].into();
-        let difficulty: H256 = [255u8; 32].into();
+        let difficulty: H256 = [100u8; 32].into();
         let genesis_header = Header{parent, nonce: 0, difficulty, timestamp:genesis_timestamp, merkle_root};
         let genesis = Block{header: genesis_header, data};
         let mut blocks: HashMap<H256, Block> = HashMap::new();
