@@ -9,7 +9,7 @@ use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
 pub struct Blockchain {
-    blocks: HashMap<H256, Block>,
+    pub blocks: HashMap<H256, Block>,
     heights: HashMap<H256, u128>,
     tip: H256
 }

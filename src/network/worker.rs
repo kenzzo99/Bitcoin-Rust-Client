@@ -1,7 +1,12 @@
 use super::message::Message;
 use super::peer;
 use super::server::Handle as ServerHandle;
-use crate::types::hash::H256;
+use crate::types::hash::{H256, Hashable};
+use crate::types::block::Block;
+use crate::Blockchain;
+use std::sync::Arc;
+use std::sync::Mutex;
+
 
 use log::{debug, warn, error};
 
@@ -16,6 +21,7 @@ pub struct Worker {
     msg_chan: smol::channel::Receiver<(Vec<u8>, peer::Handle)>,
     num_worker: usize,
     server: ServerHandle,
+    chain: Arc<Mutex<Blockchain>>
 }
 
 
@@ -24,11 +30,13 @@ impl Worker {
         num_worker: usize,
         msg_src: smol::channel::Receiver<(Vec<u8>, peer::Handle)>,
         server: &ServerHandle,
+        chain: &Arc<Mutex<Blockchain>>
     ) -> Self {
         Self {
             msg_chan: msg_src,
             num_worker,
             server: server.clone(),
+            chain: Arc::clone(chain)
         }
     }
 
@@ -44,6 +52,7 @@ impl Worker {
     }
 
     fn worker_loop(&self) {
+        let mut orphan_buffer: Vec<Block> = Vec::new();
         loop {
             let result = smol::block_on(self.msg_chan.recv());
             if let Err(e) = result {
@@ -61,7 +70,93 @@ impl Worker {
                 Message::Pong(nonce) => {
                     debug!("Pong: {}", nonce);
                 }
-                _ => unimplemented!(),
+                Message::NewBlockHashes(hash_vec) => {
+                    
+                    //get the lock
+                    let mut chain = self.chain.lock().unwrap();
+                    let mut new_hashes: Vec<H256> = Vec::new();
+
+                    for i in 0..hash_vec.len(){
+
+                        if !(chain.blocks.contains_key(&hash_vec[i])){
+                            new_hashes.push(hash_vec[i]);
+                        }
+
+                    }
+                    // insert any new hashes that weren't already in the chain
+                    if new_hashes.len() != 0 {
+                        peer.write(Message::GetBlocks(new_hashes));
+                    }
+                    // drop the lock on the chain
+                    drop(chain);
+                }
+
+                Message::GetBlocks(block_hashes) => {
+                    // get the lock
+                    let mut chain = self.chain.lock().unwrap();
+
+                    // vec to store requested blocks
+                    let mut blocks = Vec::new();
+
+                    // iterate through requested blocks 
+                    for i in 0..blocks.len() {
+                        // check if the block is in the chain
+                        if chain.blocks.contains_key(&block_hashes[i]) {
+                            blocks.push(chain.blocks.get(&block_hashes[i]).unwrap().clone());
+                        }
+                    }
+                    // send the blocks if any are in the chain
+                    if blocks.len() != 0 {
+                        peer.write(Message::Blocks(blocks));
+                    }
+                    // drop the lock on the chain
+                    drop(chain); 
+                }
+
+                // handles received blocks
+                Message::Blocks(blocks) =>{
+                    let mut chain = self.chain.lock().unwrap();
+                    // vec of new blocks
+                    let mut new_blocks = Vec::new();
+                    // iterate over received blocks
+                    for i in 0..blocks.len() {
+                        // check if the chain already contains the block. If not, proceed with validity checks
+                        if !(chain.blocks.contains_key(&blocks[i].hash())) {
+                            // check if the chain contains the blocks parent
+                            if (chain.blocks.contains_key(&blocks[i].get_parent())) {
+                                // get parents/current difficulty
+                                let difficulty = chain.blocks.get(&blocks[i].get_parent()).unwrap().get_difficulty();
+                                // perform PoW validity check. If passed, insert block to chain and add it to new_blocks
+                                if (&blocks[i].hash() <= &difficulty) {
+                                    chain.insert(&blocks[i]);
+                                    new_blocks.push(blocks[i].hash());
+                                    
+                                    // check if the processed block is the parrent of any of the blocks in orphan_buffer
+                                    // if so, process the orphan block
+                                    for j in 0..orphan_buffer.len() {
+                                        if &blocks[i].hash() == &orphan_buffer[j].get_parent() {
+                                            let mut orphans: Vec<Block> = Vec::new();
+                                            orphans.push(orphan_buffer[j].clone());
+                                            orphan_buffer.remove(j);
+                                            self.server.broadcast(Message::Blocks(orphans));
+                                        }
+                                    }
+                                }
+                            }
+                            else {
+                                orphan_buffer.push(blocks[i].clone());
+                                let mut orphans: Vec<H256> = Vec::new();
+                                orphans.push(blocks[i].get_parent());
+                                self.server.broadcast(Message::GetBlocks(orphans));
+                            }
+                        }
+                    }
+                    // broadcast all inserted blocks
+                    self.server.broadcast(Message::NewBlockHashes(new_blocks));
+                    // drop the lock
+                    drop(chain); 
+                }
+                _ => unimplemented!()
             }
         }
     }
@@ -90,7 +185,9 @@ impl TestMsgSender {
 fn generate_test_worker_and_start() -> (TestMsgSender, ServerTestReceiver, Vec<H256>) {
     let (server, server_receiver) = ServerHandle::new_for_test();
     let (test_msg_sender, msg_chan) = TestMsgSender::new();
-    let worker = Worker::new(1, msg_chan, &server);
+    let blockchain = Blockchain::new();
+    let blockchain = Arc::new(Mutex::new(blockchain));
+    let worker = Worker::new(1, msg_chan, &server, &blockchain);
     worker.start(); 
     (test_msg_sender, server_receiver, vec![])
 }
