@@ -99,7 +99,7 @@ impl Worker {
                     let mut blocks = Vec::new();
 
                     // iterate through requested blocks 
-                    for i in 0..blocks.len() {
+                    for i in 0..block_hashes.len() {
                         // check if the block is in the chain
                         if chain.blocks.contains_key(&block_hashes[i]) {
                             blocks.push(chain.blocks.get(&block_hashes[i]).unwrap().clone());
@@ -128,7 +128,7 @@ impl Worker {
                                 let difficulty = chain.blocks.get(&blocks[i].get_parent()).unwrap().get_difficulty();
                                 // perform PoW validity check. If passed, insert block to chain and add it to new_blocks
                                 if (&blocks[i].hash() <= &difficulty) {
-                                    chain.insert(&blocks[i]);
+                                    chain.insert(&blocks[i].clone());
                                     new_blocks.push(blocks[i].hash());
                                     
                                     // check if the processed block is the parrent of any of the blocks in orphan_buffer
@@ -150,11 +150,16 @@ impl Worker {
                                 self.server.broadcast(Message::GetBlocks(orphans));
                             }
                         }
+
                     }
                     // broadcast all inserted blocks
                     self.server.broadcast(Message::NewBlockHashes(new_blocks));
                     // drop the lock
                     drop(chain); 
+                }
+
+                Message::NewTransactionHashes(transaction_hashes) => {
+                    unimplemented!()
                 }
                 _ => unimplemented!()
             }
@@ -184,12 +189,14 @@ impl TestMsgSender {
 /// returns two structs used by tests, and an ordered vector of hashes of all blocks in the blockchain
 fn generate_test_worker_and_start() -> (TestMsgSender, ServerTestReceiver, Vec<H256>) {
     let (server, server_receiver) = ServerHandle::new_for_test();
-    let (test_msg_sender, msg_chan) = TestMsgSender::new();
+    
     let blockchain = Blockchain::new();
+    let longest_chain = blockchain.all_blocks_in_longest_chain();
     let blockchain = Arc::new(Mutex::new(blockchain));
+    let (test_msg_sender, msg_chan) = TestMsgSender::new();
     let worker = Worker::new(1, msg_chan, &server, &blockchain);
     worker.start(); 
-    (test_msg_sender, server_receiver, vec![])
+    (test_msg_sender, server_receiver, longest_chain)
 }
 
 // DO NOT CHANGE THIS COMMENT, IT IS FOR AUTOGRADER. BEFORE TEST
