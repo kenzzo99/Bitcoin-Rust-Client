@@ -4,6 +4,8 @@ use std::sync::{Arc, Mutex};
 use crate::blockchain::Blockchain;
 use crate::types::block::Block;
 use crate::network::server::Handle as ServerHandle;
+use crate::network::message::Message;
+use crate::types::hash::Hashable;
 use std::thread;
 
 #[derive(Clone)]
@@ -40,9 +42,14 @@ impl Worker {
         loop {
             let _block = self.finished_block_chan.recv().expect("Receive finished block error");
             // TODO for student: insert this finished block to blockchain, and broadcast this block hash
+            // get the lock and add the finihed block to the chain
             let mut chain = self.blockchain.lock().unwrap();
             chain.insert(&_block);
+            // broadcast the hash of the new block
+            let mut hash = Vec::new();
+            hash.push(_block.hash());
+            self.server.broadcast(Message::NewBlockHashes(hash));
             drop(chain);
-        }
+        }   
     }
 }

@@ -4,9 +4,7 @@ use super::server::Handle as ServerHandle;
 use crate::types::hash::{H256, Hashable};
 use crate::types::block::Block;
 use crate::Blockchain;
-use std::sync::Arc;
-use std::sync::Mutex;
-
+use std::sync::{Arc, Mutex};
 
 use log::{debug, warn, error};
 
@@ -70,20 +68,26 @@ impl Worker {
                 Message::Pong(nonce) => {
                     debug!("Pong: {}", nonce);
                 }
+
+                // Takes the vec of block hashes, checks if they are already in the chain
+                // For those that are not, it requests those blocks so it can add them 
+                // to the chain
                 Message::NewBlockHashes(hash_vec) => {
                     
-                    //get the lock
+                    // get the lock
                     let mut chain = self.chain.lock().unwrap();
+                    // create a vector for new hashes
                     let mut new_hashes: Vec<H256> = Vec::new();
 
+                    // iterate through hash_vec and add all hashes that are not 
+                    // already in the chain
                     for i in 0..hash_vec.len(){
-
                         if !(chain.blocks.contains_key(&hash_vec[i])){
                             new_hashes.push(hash_vec[i]);
                         }
-
                     }
-                    // insert any new hashes that weren't already in the chain
+
+                    // send any new hashes that weren't already in the chain by GetBlocks msg
                     if new_hashes.len() != 0 {
                         peer.write(Message::GetBlocks(new_hashes));
                     }
@@ -105,6 +109,7 @@ impl Worker {
                             blocks.push(chain.blocks.get(&block_hashes[i]).unwrap().clone());
                         }
                     }
+
                     // send the blocks if any are in the chain
                     if blocks.len() != 0 {
                         peer.write(Message::Blocks(blocks));
