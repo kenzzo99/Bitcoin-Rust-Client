@@ -4,9 +4,12 @@ use super::server::Handle as ServerHandle;
 use crate::types::hash::{H256, Hashable};
 use crate::types::block::Block;
 use crate::Blockchain;
+use crate::types::transaction::{self, SignedTransaction, Transaction, verify};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use log::{debug, warn, error};
+use stderrlog::new;
 
 use std::thread;
 
@@ -19,7 +22,8 @@ pub struct Worker {
     msg_chan: smol::channel::Receiver<(Vec<u8>, peer::Handle)>,
     num_worker: usize,
     server: ServerHandle,
-    chain: Arc<Mutex<Blockchain>>
+    chain: Arc<Mutex<Blockchain>>,
+    mem_pool: Arc<Mutex<HashMap<H256, SignedTransaction>>>,
 }
 
 
@@ -28,13 +32,15 @@ impl Worker {
         num_worker: usize,
         msg_src: smol::channel::Receiver<(Vec<u8>, peer::Handle)>,
         server: &ServerHandle,
-        chain: &Arc<Mutex<Blockchain>>
+        chain: &Arc<Mutex<Blockchain>>,
+        mem_pool: &Arc<Mutex<HashMap<H256, SignedTransaction>>>,
     ) -> Self {
         Self {
             msg_chan: msg_src,
             num_worker,
             server: server.clone(),
-            chain: Arc::clone(chain)
+            chain: Arc::clone(chain),
+            mem_pool: Arc::clone(mem_pool)
         }
     }
 
@@ -134,19 +140,47 @@ impl Worker {
                                 println!("Check 2 Passed: Chain does contain block's parent");
                                 // get parents/current difficulty
                                 let difficulty = chain.blocks.get(&blocks[i].get_parent()).unwrap().get_difficulty();
-                                // println!("difficulty = {:?}", difficulty);
-                                // perform PoW validity check. If passed, insert block to chain and add it to new_blocks
+                                
                                 if blocks[i].hash() <= difficulty {
                                     println!("Check 3 Passed: PoW validity check for difficulty={:?}", difficulty);
-                                    chain.insert(&blocks[i]); // (&blocks[i].clone());
+                                    // INSERT CHECK THAT THE SENDER HAS SUFFICIENT FUNDS FOR THE TRANSACTION BEFORE ADDING IT
+                                    let transactions = blocks[i].data.data.clone();
+                                    let mut invalidBlock = false;
+                                    for transaction in transactions.clone() {
+                                        // do not include the block if there's even a one non-valid transaction
+                                        if !verify(&transaction.transaction, &transaction.pubkey, &transaction.signature) {
+                                            println!("Transaction not properly signed. Block disregarded.");
+                                            invalidBlock = true;
+                                            
+                                        }
+                                    }
+                                    // disregard current block and continue processing the next one
+                                    if invalidBlock {
+                                        continue;
+                                    }
+                                    // if all transactions are valid remove them from mem pool and insert the block to blockchain
+                                    for transaction in transactions {
+                                        // get the lock for the mem_pool
+                                        let mut mem_pool = self.mem_pool.lock().unwrap();
+                                        // remove transaction from the mempool
+                                        mem_pool.remove(&transaction.hash());
+                                    }
+                                    println!("We got to here.");
+                                    chain.insert(&blocks[i].clone()); // (&blocks[i].clone());
                                     new_blocks.push(blocks[i].hash());
                                     
                                     // check if the processed block is the parent of any of the blocks in orphan_buffer
                                     // if so, process the orphan block
-                                    for j in 0..orphan_buffer.len() {
+                                    let mut remove = false;
+                                    for mut j in 0..orphan_buffer.len() {
+                                        if remove {
+                                            j = j - 1;
+                                        }
                                         if &blocks[i].hash() == &orphan_buffer[j].get_parent() {
+                                            remove = true;
                                             let mut orphans: Vec<Block> = Vec::new();
                                             orphans.push(orphan_buffer[j].clone());
+
                                             orphan_buffer.remove(j);
                                             self.server.broadcast(Message::Blocks(orphans));
                                         }
@@ -174,9 +208,70 @@ impl Worker {
                 }
 
                 Message::NewTransactionHashes(transaction_hashes) => {
-                    unimplemented!()
+                    let mut new_transactions:Vec<H256> = Vec::new();
+                    // go through the mempool to check if it contains the transactions
+                    // if mempool does not have the transaction add it to new_transactions
+                    for transaction in transaction_hashes {
+                        let mem_pool = self.mem_pool.lock().unwrap();
+                        // check
+                        if !mem_pool.contains_key(&transaction) {
+                            new_transactions.push(transaction.clone());
+                            // print here for tests
+                        }
+                    }
+                    // ask for missing transactions
+                    if new_transactions.len() != 0 {
+                        println!("Asking for transactions in NewTransactionsHashes MSG");
+                        peer.write(Message::GetTransactions(new_transactions));
+                    }
                 }
-                _ => unimplemented!()
+                Message::GetTransactions(transaction_hashes) => {
+                    let mut transactions = Vec::new();
+                    // go through new transactions and check if you have them in the mempool
+                    // if so, push them to the vec and broadcast it with Transaction() msg
+                    for transaction in transaction_hashes {
+                        let mem_pool = self.mem_pool.lock().unwrap();
+                        if mem_pool.contains_key(&transaction) {
+                            transactions.push(mem_pool[&transaction].clone());
+                            // print stuff for tests
+                        }
+                    }
+
+                    // broadcast
+                    if transactions.len() != 0 {
+                        println!("Broadcasting transactions in GetTransactions MSG");
+                        peer.write(Message::Transactions(transactions));
+                    }
+                }
+                Message::Transactions(transactions) => {
+                    let mut new_transactions = Vec::new();
+                    // check if transactions are properly signed using public key
+                    for transaction in transactions {
+                        let mut mem_pool = self.mem_pool.lock().unwrap();
+                        // if SignedTransaction is not properly signed, remove it from the mem_pool and continue
+                        if !verify(&transaction.transaction, &transaction.pubkey, &transaction.signature) {
+                            mem_pool.remove(&transaction.hash());
+                            continue;
+                        }
+
+                        let transaction = transaction.clone();
+
+                        let hash = transaction.hash();
+                        // add transaction to the mempool if it is not already in it
+                        // add its hash to new_transactions vec
+                        if !(mem_pool.contains_key(&hash)) {
+                            new_transactions.push(transaction.clone().hash());
+                            mem_pool.insert(hash, transaction.clone());
+                        }
+                    }
+
+                    // broadcast the hashes of new transactions
+                    if new_transactions.len() != 0 {
+                        println!("Broadcasting hashes of new transactions in Transactions MSG");
+                        self.server.broadcast(Message::NewTransactionHashes(new_transactions));
+                    }
+                }
+                _ => unimplemented!()   
             }
         }
     }
@@ -209,8 +304,8 @@ fn generate_test_worker_and_start() -> (TestMsgSender, ServerTestReceiver, Vec<H
     let longest_chain = blockchain.all_blocks_in_longest_chain();
     let blockchain = Arc::new(Mutex::new(blockchain));
     let (test_msg_sender, msg_chan) = TestMsgSender::new();
-    let worker = Worker::new(1, msg_chan, &server, &blockchain);
-    worker.start(); 
+    // let worker = Worker::new(1, msg_chan, &server, &blockchain);
+    // worker.start(); 
     (test_msg_sender, server_receiver, longest_chain)
 }
 

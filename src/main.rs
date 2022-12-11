@@ -7,17 +7,20 @@ pub mod blockchain;
 pub mod types;
 pub mod miner;
 pub mod network;
-
+pub mod txgenerator;
 use blockchain::Blockchain;
 use clap::clap_app;
 use smol::channel;
 use log::{error, info};
 use api::Server as ApiServer;
+use types::hash::H256;
+use types::transaction::SignedTransaction;
 use std::net;
 use std::process;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time;
+use std::collections::HashMap;
 
 fn main() {
     // parse command line arguments
@@ -37,6 +40,7 @@ fn main() {
     stderrlog::new().verbosity(verbosity).init().unwrap();
     let blockchain = Blockchain::new();
     let blockchain = Arc::new(Mutex::new(blockchain));
+    let mem_pool = Arc::new(Mutex::new(HashMap::new()));
     // parse p2p server address
     let p2p_addr = matches
         .value_of("peer_addr")
@@ -77,12 +81,18 @@ fn main() {
         p2p_workers,
         msg_rx,
         &server,
-        &blockchain
+        &blockchain,
+        &mem_pool
     );
     worker_ctx.start();
 
+    // start the transaction generator 
+    let (txgen_ctx, txgen, tx_channel) = txgenerator::new(&blockchain, &mem_pool);
+    let txgen_worker_ctx = txgenerator::worker::Worker::new(&server, tx_channel, &mem_pool, );
+    txgen_ctx.start();
+    txgen_worker_ctx.start();
     // start the miner
-    let (miner_ctx, miner, finished_block_chan) = miner::new(&blockchain);
+    let (miner_ctx, miner, finished_block_chan) = miner::new(&blockchain, &mem_pool);
     let miner_worker_ctx = miner::worker::Worker::new(&server, finished_block_chan, &blockchain);
     miner_ctx.start();
     miner_worker_ctx.start();
@@ -127,6 +137,7 @@ fn main() {
         &miner,
         &server,
         &blockchain,
+        &txgen
     );
 
     loop {

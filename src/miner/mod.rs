@@ -3,6 +3,7 @@ extern crate rand;
 use rand::Rng;
 use log::info;
 use crossbeam::channel::{unbounded, Receiver, Sender, TryRecvError};
+use std::collections::HashMap;
 use std::ops::Deref;
 use std::time;
 use std::thread;
@@ -13,7 +14,8 @@ use std::time::UNIX_EPOCH;
 use crate::blockchain::Blockchain;
 use crate::types::block::{Block, Data, Header};
 use crate::types::hash::{H256, Hashable};
-use crate::types::transaction::SignedTransaction;
+// use crate::types::merkle::verify;
+use crate::types::transaction::{SignedTransaction, verify};
 use crate::types::merkle::{MerkleTree};
 
 
@@ -35,6 +37,7 @@ pub struct Context {
     control_chan: Receiver<ControlSignal>,
     operating_state: OperatingState,
     finished_block_chan: Sender<Block>,
+    mem_pool: Arc<Mutex<HashMap<H256, SignedTransaction>>>
 }
 
 #[derive(Clone)]
@@ -43,7 +46,7 @@ pub struct Handle {
     control_chan: Sender<ControlSignal>,
 }
 
-pub fn new(blockchain:&Arc<Mutex<Blockchain>>) -> (Context, Handle, Receiver<Block>) {
+pub fn new(blockchain:&Arc<Mutex<Blockchain>>, mem_pool: &Arc<Mutex<HashMap<H256, SignedTransaction>>>) -> (Context, Handle, Receiver<Block>) {
     let (signal_chan_sender, signal_chan_receiver) = unbounded();
     let (finished_block_sender, finished_block_receiver) = unbounded();
 
@@ -52,6 +55,7 @@ pub fn new(blockchain:&Arc<Mutex<Blockchain>>) -> (Context, Handle, Receiver<Blo
         control_chan: signal_chan_receiver,
         operating_state: OperatingState::Paused,
         finished_block_chan: finished_block_sender,
+        mem_pool: Arc::clone(mem_pool)
     };
 
     let handle = Handle {
@@ -63,9 +67,11 @@ pub fn new(blockchain:&Arc<Mutex<Blockchain>>) -> (Context, Handle, Receiver<Blo
 
 #[cfg(any(test,test_utilities))]
 fn test_new() -> (Context, Handle, Receiver<Block>) {
+    // create an empty blockchain and mempool
     let blockchain = Blockchain::new();
     let arc_blockchain = Arc::new(Mutex::new(blockchain));
-    new(&arc_blockchain)
+    let mem_pool = Arc::new(Mutex::new(HashMap::new()));
+    new(&arc_blockchain, &mem_pool)
 }
 
 impl Handle {
@@ -97,10 +103,11 @@ impl Context {
 
     fn miner_loop(&mut self) {
         // main mining loop
-        let chain = self.blockchain.lock().unwrap();
-        let mut parent = chain.tip();
-        drop(chain);
+
         loop {
+            let chain = self.blockchain.lock().unwrap();
+            let mut parent = chain.tip();
+            drop(chain);
             // check and react to control signals
             match self.operating_state {
                 OperatingState::Paused => {
@@ -152,17 +159,53 @@ impl Context {
             // TODO for student: actual mining, create a block
             let nonce: u32 = rand::thread_rng().gen();
             let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
-            let vec: Vec<SignedTransaction> = Vec::new();
-            let data = Data{data: vec};
-            let difficulty: H256 = [60u8; 32].into();
+            let mut vec: Vec<SignedTransaction> = Vec::new();
+            let mut data = Data{data: vec};
+            // REMEMBER TO CHANGE DIFFICULTY IN blockchain/mod.rs AS WELL!!
+            let difficulty: H256 = [10u8; 32].into();
+
+            let mut mem_pool = self.mem_pool.lock().unwrap();
+            // keeps track of number of transaction added to the block
+            let mut i = 0;
+            // vector of all included transactions
+            let mut included = Vec::new();
+            let mut invalid = Vec::new();
+            // verify the signature of every transaction in the mem_pool
+            // if it's valid add it to the block
+            for transaction in mem_pool.values() {
+                if verify(&transaction.transaction, &transaction.pubkey, &transaction.signature) {
+                    data.data.push(transaction.clone());
+                    included.push(transaction.hash());
+                    i = i + 1;
+                }
+                // add invalid transactions to invalid vec
+                else {
+                    let hash = transaction.hash();
+                    invalid.push(hash);
+                }
+                // if block is full stop adding transactions
+                if i >= 42 {
+                    break;
+                }
+            }
+            // remove all invalid transactions from mem_pool
+            for transaction in invalid {
+                mem_pool.remove(&transaction);
+            }
+
             let merkle_tree = MerkleTree::new(&data.data);
             let merkle_root = merkle_tree.root();
             let header = Header{parent: parent, nonce, difficulty, timestamp, merkle_root};
             let block = Block{header, data: data};
+
             if block.hash() <= difficulty {
                 // drop(chain);
                 self.finished_block_chan.send(block.clone()).expect("Send finished block error");
                 parent = block.hash();
+                // remove all included transactions from the mempool
+                for hash in included {
+                    mem_pool.remove(&hash);
+                }
             }
             // TODO for student: if block mining finished, you can have something like: self.finished_block_chan.send(block.clone()).expect("Send finished block error");
 
@@ -198,7 +241,6 @@ mod test {
             block_prev = block_next;
         }
     }
-
 }
 
 // DO NOT CHANGE THIS COMMENT, IT IS FOR AUTOGRADER. AFTER TEST

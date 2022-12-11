@@ -11,16 +11,17 @@ use super::hash::H256;
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Transaction {
-    sender: Address,
-    receiver: Address,
-    value: u128, // Not sure if u128 is necessary, but I assume it has to be very large (lot of Satoshis in one bitcoin)
+    pub sender: Address,
+    pub receiver: Address,
+    pub value: u128, // Not sure if u128 is necessary, but I assume it has to be very large (lot of Satoshis in one bitcoin)
+    pub nonce: u128,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct SignedTransaction {
-    transaction: Transaction,
-    signature: Vec<u8>,
-    pubkey: Vec<u8>,
+    pub transaction: Transaction,
+    pub signature: Vec<u8>,
+    pub pubkey: Vec<u8>,
     // signature and pubkey represented as Vec<u8> for convenience --> check these structs as a part
     // of ring crate
 }
@@ -67,9 +68,9 @@ pub fn generate_random_transaction() -> Transaction {
     // return a transaction passing ar as a constructor argument
     let sender: Address = Address::from(ar1);
     let receiver: Address = Address::from(ar2);
-
+    let nonce: u128 =  thread_rng().gen();
     let value: u128 = thread_rng().gen();
-    let transaction = Transaction{sender, receiver, value};
+    let transaction = Transaction{sender, receiver, value, nonce};
     transaction
 
 }
