@@ -101,7 +101,6 @@ impl Context {
         let mut parent = chain.tip();
         drop(chain);
         loop {
-            
             // check and react to control signals
             match self.operating_state {
                 OperatingState::Paused => {
@@ -155,7 +154,7 @@ impl Context {
             let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
             let vec: Vec<SignedTransaction> = Vec::new();
             let data = Data{data: vec};
-            let difficulty: H256 = [255u8; 32].into();
+            let difficulty: H256 = [60u8; 32].into();
             let merkle_tree = MerkleTree::new(&data.data);
             let merkle_root = merkle_tree.root();
             let header = Header{parent: parent, nonce, difficulty, timestamp, merkle_root};
@@ -199,9 +198,7 @@ mod test {
             block_prev = block_next;
         }
     }
-    // thread 'miner' panicked at 'Send finished block error: "SendError(..)"', src\miner\mod.rs:160:62
-    // thread 'miner::test::miner_three_block' panicked at 'timeout: the function call took 2 ms. Max time 60000 ms', src\miner\mod.rs:183:5
-    // I'm updating the parent through &chain.tip(), however I'm not sure that the block ever get's inserted, as we don't have an instance of Worker
+
 }
 
 // DO NOT CHANGE THIS COMMENT, IT IS FOR AUTOGRADER. AFTER TEST

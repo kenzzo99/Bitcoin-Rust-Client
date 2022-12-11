@@ -4,7 +4,6 @@ use crate::types::merkle::MerkleTree;
 use crate::types::hash::Hashable;
 use crate::types::transaction::SignedTransaction;
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
@@ -17,11 +16,12 @@ pub struct Blockchain {
 impl Blockchain {
     /// Create a new blockchain, only containing the genesis block
     pub fn new() -> Self {
-        let genesis_timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
+        let genesis_timestamp = 0;
         let data = Data{data: Vec::new()};
         let merkle_root = MerkleTree::new(&data.data).root();
         let parent: H256 = [0u8; 32].into();
-        let difficulty: H256 = [100u8; 32].into();
+        // when changing the difficulty make sure to change it in miner/mod.rs as well!!! 
+        let difficulty: H256 = [60u8; 32].into();
         let genesis_header = Header{parent, nonce: 0, difficulty, timestamp:genesis_timestamp, merkle_root};
         let genesis = Block{header: genesis_header, data};
         let mut blocks: HashMap<H256, Block> = HashMap::new();
@@ -41,12 +41,12 @@ impl Blockchain {
         let longest_chain_height: u128 = self.heights.get(&self.tip).unwrap().clone();
         self.heights.insert(hash, new_block_height);
         
-        if (new_block_height > longest_chain_height) {
+        if new_block_height > longest_chain_height {
             self.tip = hash;
         }
     }
 
-    /// Get the last block's hash of the longest chain
+    /// Get the hash of the last block in the longest chain
     pub fn tip(&self) -> H256 {
         self.tip
     }
@@ -55,10 +55,11 @@ impl Blockchain {
     pub fn all_blocks_in_longest_chain(&self) -> Vec<H256> {
         let mut vec: Vec<H256> = Vec::new();
         let mut tip = self.tip;
-        for i in 0..self.blocks.len() {
+        for _i in 0..(self.heights.get(&self.tip).unwrap().clone()) {
             vec.push(self.blocks.get(&tip).unwrap().hash());
             tip = self.blocks.get(&tip).unwrap().get_parent();
         }
+        vec.push(self.blocks.get(&tip).unwrap().hash());
         vec.reverse();
         vec
     }

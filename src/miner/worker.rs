@@ -22,7 +22,7 @@ impl Worker {
         blockchain: &Arc<Mutex<Blockchain>>,
     ) -> Self {
         Self {
-            blockchain: Arc::clone(blockchain),
+            blockchain: Arc::clone(&blockchain),
             server: server.clone(),
             finished_block_chan,
         }

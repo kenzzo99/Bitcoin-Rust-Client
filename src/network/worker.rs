@@ -73,9 +73,9 @@ impl Worker {
                 // For those that are not, it requests those blocks so it can add them 
                 // to the chain
                 Message::NewBlockHashes(hash_vec) => {
-                    
+                    println!("Received hashes: {:?}",hash_vec);
                     // get the lock
-                    let mut chain = self.chain.lock().unwrap();
+                    let chain = self.chain.lock().unwrap();
                     // create a vector for new hashes
                     let mut new_hashes: Vec<H256> = Vec::new();
 
@@ -92,12 +92,12 @@ impl Worker {
                         peer.write(Message::GetBlocks(new_hashes));
                     }
                     // drop the lock on the chain
-                    drop(chain);
+                    // drop(chain);
                 }
 
                 Message::GetBlocks(block_hashes) => {
                     // get the lock
-                    let mut chain = self.chain.lock().unwrap();
+                    let chain = self.chain.lock().unwrap();
 
                     // vec to store requested blocks
                     let mut blocks = Vec::new();
@@ -109,13 +109,14 @@ impl Worker {
                             blocks.push(chain.blocks.get(&block_hashes[i]).unwrap().clone());
                         }
                     }
-
+                    println!("Blocks len: {:?}", blocks.len());
                     // send the blocks if any are in the chain
                     if blocks.len() != 0 {
+                        println!("Requesting blocks:{:?}",blocks);
                         peer.write(Message::Blocks(blocks));
                     }
                     // drop the lock on the chain
-                    drop(chain); 
+                    // drop(chain); 
                 }
 
                 // handles received blocks
@@ -124,19 +125,23 @@ impl Worker {
                     // vec of new blocks
                     let mut new_blocks = Vec::new();
                     // iterate over received blocks
-                    for i in 0..blocks.len() {
+                    for i in 0..blocks.len() {                        
                         // check if the chain already contains the block. If not, proceed with validity checks
                         if !(chain.blocks.contains_key(&blocks[i].hash())) {
+                            println!("Check 1 Passed: Block is not already in chain.");
                             // check if the chain contains the blocks parent
-                            if (chain.blocks.contains_key(&blocks[i].get_parent())) {
+                            if chain.blocks.contains_key(&blocks[i].get_parent()) {
+                                println!("Check 2 Passed: Chain does contain block's parent");
                                 // get parents/current difficulty
                                 let difficulty = chain.blocks.get(&blocks[i].get_parent()).unwrap().get_difficulty();
+                                // println!("difficulty = {:?}", difficulty);
                                 // perform PoW validity check. If passed, insert block to chain and add it to new_blocks
-                                if (&blocks[i].hash() <= &difficulty) {
-                                    chain.insert(&blocks[i].clone());
+                                if blocks[i].hash() <= difficulty {
+                                    println!("Check 3 Passed: PoW validity check for difficulty={:?}", difficulty);
+                                    chain.insert(&blocks[i]); // (&blocks[i].clone());
                                     new_blocks.push(blocks[i].hash());
                                     
-                                    // check if the processed block is the parrent of any of the blocks in orphan_buffer
+                                    // check if the processed block is the parent of any of the blocks in orphan_buffer
                                     // if so, process the orphan block
                                     for j in 0..orphan_buffer.len() {
                                         if &blocks[i].hash() == &orphan_buffer[j].get_parent() {
@@ -147,6 +152,7 @@ impl Worker {
                                         }
                                     }
                                 }
+                            
                             }
                             else {
                                 orphan_buffer.push(blocks[i].clone());
@@ -158,9 +164,13 @@ impl Worker {
 
                     }
                     // broadcast all inserted blocks
-                    self.server.broadcast(Message::NewBlockHashes(new_blocks));
+                    if new_blocks.len() != 0 {
+                        println!("Broadcasting the new blocks in Blocks()");
+                        self.server.broadcast(Message::NewBlockHashes(new_blocks));
+                    }
+                    
                     // drop the lock
-                    drop(chain); 
+                    // drop(chain); 
                 }
 
                 Message::NewTransactionHashes(transaction_hashes) => {
@@ -195,7 +205,7 @@ impl TestMsgSender {
 fn generate_test_worker_and_start() -> (TestMsgSender, ServerTestReceiver, Vec<H256>) {
     let (server, server_receiver) = ServerHandle::new_for_test();
     
-    let blockchain = Blockchain::new();
+    let mut blockchain = Blockchain::new();
     let longest_chain = blockchain.all_blocks_in_longest_chain();
     let blockchain = Arc::new(Mutex::new(blockchain));
     let (test_msg_sender, msg_chan) = TestMsgSender::new();
